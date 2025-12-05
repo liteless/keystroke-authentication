@@ -231,7 +231,6 @@ def load_all_sessions(root_dir: str) -> List[KeystrokeSession]:
             
             user_id = int(stem[:3])
             session_id = int(stem[3])
-            keyboard_type = int(stem[4])
             task_id = int(stem[5])
             
             #Extra check to ensure we only have task 0 files
@@ -297,7 +296,7 @@ def build_datasets(root_dir: str) -> Tuple[List[np.ndarray], np.ndarray, List[np
     user_sessions_train: Dict[int, List[int]] = defaultdict(list)
     user_sessions_test: Dict[int, List[int]] = defaultdict(list)
 
-    for idx, session in enumerate(sessions): 
+    for _, session in enumerate(sessions): 
         #extract digraph for this session
         digraphs = extract_digraphs(session) #(L_i, 9)
 
