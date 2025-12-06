@@ -1,7 +1,5 @@
-from matplotlib.pyplot import stem
 import numpy as np
 from typing import List, Tuple, Dict
-import os
 from pathlib import Path
 from collections import defaultdict
 
@@ -186,6 +184,49 @@ def extract_digraphs(session: KeystrokeSession) -> np.ndarray:
 
     return np.array(digraphs, dtype=np.float32) 
 
+
+def split_window_digraphs(digraphs: np.ndarray, window_size: int = 50, step: int = 25, min_len: int = 30) -> list:
+    """
+    Split a digraph sequence into sliding windows.
+
+    Args:
+        digraphs: numpy array of shape (L, features)
+        window_size: target number of digraphs per window
+        step: step size between window starts (controls overlap)
+        min_len: minimum acceptable length for a window; windows shorter than
+                 this will be discarded.
+
+    Returns:
+        List of numpy arrays each with shape (window_len, features)
+    """
+    windows = []
+    if digraphs is None:
+        return windows
+
+    L = digraphs.shape[0]
+    if L < min_len:
+        return windows
+
+    # If entire sequence is shorter than window_size but >= min_len, return single window
+    if L <= window_size:
+        windows.append(digraphs.copy())
+        return windows
+
+    # Sliding windows
+    start = 0
+    while start < L:
+        end = start + window_size
+        if end <= L:
+            windows.append(digraphs[start:end].copy())
+        else:
+            # For the final window, include remainder only if it's >= min_len
+            if L - start >= min_len:
+                windows.append(digraphs[start:L].copy())
+            break
+        start += step
+
+    return windows
+
 # def normalize_digraphs(digraphs: np.ndarray) -> np.ndarray:
 #     """ Normalize digraph features """
 #     if len(digraphs) == 0:
@@ -272,7 +313,7 @@ def load_all_sessions(root_dir: str) -> List[KeystrokeSession]:
     return sessions
 
 #---- STEP 4: CREATE TRAIN AND TEST DATA BY LOOPING OVER PARSED DATASET ----
-def build_datasets(root_dir: str) -> Tuple[List[np.ndarray], np.ndarray, List[np.ndarray], np.ndarray, Dict[int, List[int]], Dict[int, List[int]]]:
+def build_datasets(root_dir: str, window_size: int = 50, step: int = 25, min_len: int = 30) -> Tuple[List[np.ndarray], np.ndarray, List[np.ndarray], np.ndarray, Dict[int, List[int]], Dict[int, List[int]]]:
     """
     Load all sessions from the root directory, extract the digraphs, and split into
     training (users 001-100) and testing (users 101-148)
@@ -303,21 +344,27 @@ def build_datasets(root_dir: str) -> Tuple[List[np.ndarray], np.ndarray, List[np
         #Ensure there are no empty sessions and only valid digraphs
         if digraphs is None or digraphs.shape[0] == 0:
             continue
-            
+
+        # Split session digraphs into smaller windows
+        windows = split_window_digraphs(digraphs, window_size=window_size, step=step, min_len=min_len)
+
+        if not windows:
+            continue
+
         user_id = session.user_id
 
-        #Training set: users 001-100
-        if 1 <= user_id <= 100:
-            session_idx = len(X_train)
-            X_train.append(digraphs)
-            y_train.append(user_id)
-            user_sessions_train[user_id].append(session_idx)
-        #Testing set: users 101-148
-        else:
-            session_idx = len(X_test)
-            X_test.append(digraphs)
-            y_test.append(user_id)
-            user_sessions_test[user_id].append(session_idx)
+        # Add each window as its own sample; update user_sessions mapping accordingly
+        for win in windows:
+            if 1 <= user_id <= 100:
+                session_idx = len(X_train)
+                X_train.append(win)
+                y_train.append(user_id)
+                user_sessions_train[user_id].append(session_idx)
+            else:
+                session_idx = len(X_test)
+                X_test.append(win)
+                y_test.append(user_id)
+                user_sessions_test[user_id].append(session_idx)
     
     #Convert y_train and y_test to numpy arrays
     y_train = np.array(y_train, dtype=np.int32)
