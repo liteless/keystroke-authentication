@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+from tqdm import tqdm
 from src.models import DigraphCNN, PrototypicalNetwork
 
 
@@ -84,7 +85,10 @@ class MetaLearningTrainer:
         train_accuracies = []
         val_accuracies = []
 
-        for episode in range(num_episodes):
+        # Add tqdm progress bar
+        pbar = tqdm(range(num_episodes), desc="Training Episodes", unit="episode")
+
+        for episode in pbar:
             support, support_labels, query, query_labels = self.create_episode(
                 X_train, y_train, user_sessions_train)
 
@@ -105,12 +109,33 @@ class MetaLearningTrainer:
                 tf.cast(tf.equal(preds, query_labels), tf.float32))
             train_accuracies.append(accuracy.numpy())
 
+            # Update progress bar with current metrics
+            pbar.set_postfix({
+                'loss': f'{loss.numpy():.4f}',
+                'train_acc': f'{accuracy.numpy():.4f}'
+            })
+
             if (episode + 1) % eval_interval == 0:
                 val_accuracy = self.evaluate(
                     X_val, y_val, user_sessions_val)
                 val_accuracies.append(val_accuracy)
-                print(
-                    f"Episode {episode+1}/{num_episodes} - Loss: {loss.numpy():.4f}, Train Acc: {accuracy.numpy():.4f}, Val Acc: {val_accuracy:.4f}")
+
+                # Print validation results
+                tqdm.write(
+                    f"Episode {episode+1}/{num_episodes} - "
+                    f"Loss: {loss.numpy():.4f}, "
+                    f"Train Acc: {accuracy.numpy():.4f}, "
+                    f"Val Acc: {val_accuracy:.4f}"
+                )
+
+                # Update progress bar with validation accuracy
+                pbar.set_postfix({
+                    'loss': f'{loss.numpy():.4f}',
+                    'train_acc': f'{accuracy.numpy():.4f}',
+                    'val_acc': f'{val_accuracy:.4f}'
+                })
+
+        pbar.close()
 
         return {
             'train_losses': train_losses,
@@ -118,11 +143,11 @@ class MetaLearningTrainer:
             'val_accs': val_accuracies
         }
 
-    def evaluate(self, X_eval, y_eval, user_sessions_eval):
+    def evaluate(self, X_eval, y_eval, user_sessions_eval, num_episodes=100):
         accuracy_list = []
-        num_episodes = 100
 
-        for _ in range(num_episodes):
+        # Add tqdm progress bar for evaluation
+        for _ in tqdm(range(num_episodes), desc="Evaluating", leave=False):
             support, support_labels, query, query_labels = self.create_episode(
                 X_eval, y_eval, user_sessions_eval)
 

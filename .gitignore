@@ -8,6 +8,7 @@ __pycache__/
 
 # Data
 data/
+slurm_logs/
 
 # Distribution / packaging
 .Python
