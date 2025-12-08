@@ -415,7 +415,7 @@ class VerificationMetaTrainer:
                          X_eval,
                          user_sessions_eval,
                          num_episodes: int = 200,
-                         threshold: float = 0.9):
+                         threshold: float = 0.5):
         """
         Returns accuracy, TPR, TNR, FPR, FNR over many episodes.
         """
@@ -447,7 +447,7 @@ class VerificationMetaTrainer:
             "fnr": float(fnr),
         }
     
-    def compute_confusion(self, X_eval, user_sessions_eval, num_episodes: int = 500, threshold: float = 0.9):
+    def compute_confusion(self, X_eval, user_sessions_eval, num_episodes: int = 500, threshold: float = 0.5):
         """
         Returns confusion matrix:
             [[tn, fp],

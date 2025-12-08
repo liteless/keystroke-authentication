@@ -52,7 +52,7 @@ def main():
     # Load and preprocess data
     print("Loading data...")
     DATA_ROOT = "data/UB_keystroke_dataset"
-    data = build_datasets(DATA_ROOT)
+    data = build_datasets(DATA_ROOT, window_size=80)  # ADD window_size=80
     X_train, y_train, X_test, y_test, user_sessions_train, user_sessions_test = data
 
     # Normalize

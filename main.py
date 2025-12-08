@@ -10,6 +10,12 @@ from src.gan import VAEGAN
 from src.preprocessing import build_datasets
 from src.normalization import fit_normalizer, apply_normalizer
 import matplotlib.pyplot as plt
+from src.visualization import (
+    visualize_embeddings_tsne, 
+    visualize_embeddings_umap,
+    plot_training_history,
+    plot_distance_distributions
+)
 
 # Make sure to change the below path to your local data path
 DATA_ROOT = "data/UB_keystroke_dataset"
@@ -25,16 +31,19 @@ def augment_user_data(vae_gan, user_samples, num_synthetic):
     # Encode to get latent distribution
     z_mean, z_log_var = vae_gan.encoder(user_batch, training=False)
     
-    # Generate synthetic samples
+    # Generate synthetic samples - one at a time
     synthetic_samples = []
     for _ in range(num_synthetic):
-        # Sample from the learned distribution
-        epsilon = tf.random.normal(shape=tf.shape(z_mean))
-        z = z_mean + tf.exp(0.5 * z_log_var) * epsilon
+        # Sample from the learned distribution (take mean of user's latent distribution)
+        mean_z = tf.reduce_mean(z_mean, axis=0, keepdims=True)
+        mean_logvar = tf.reduce_mean(z_log_var, axis=0, keepdims=True)
+        
+        epsilon = tf.random.normal(shape=tf.shape(mean_z))
+        z = mean_z + tf.exp(0.5 * mean_logvar) * epsilon
         
         # Decode to generate synthetic sample
         synthetic = vae_gan.decoder(z, training=False)
-        synthetic_samples.append(synthetic.numpy())
+        synthetic_samples.append(synthetic.numpy()[0])  # Extract single sample
     
     return synthetic_samples
 
@@ -53,7 +62,7 @@ def main():
     #         pickle.dump(data, f)
 
     #     print("Created preprocessed data and saved to", OUTPUT_PATH)
-    data = build_datasets(DATA_ROOT)
+    data = build_datasets(DATA_ROOT, window_size=80)
     X_train = data[0]
     y_train = data[1]
     X_test = data[2]
@@ -113,27 +122,41 @@ def main():
     vae_gan.decoder.load_weights('models/vae_decoder_weights.h5')
 
     # Find users with limited samples
-    MIN_SAMPLES = 10
+    MIN_SAMPLES = 400
+    augmented_count = 0
     for user_id, sessions in user_sessions_train.items():
         if len(sessions) < MIN_SAMPLES:
             user_samples = [X_train_norm[i] for i in sessions]
-            synthetic = augment_user_data(vae_gan, user_samples, num_synthetic=MIN_SAMPLES-len(sessions))
+            num_to_generate = MIN_SAMPLES - len(sessions)
+            synthetic = augment_user_data(vae_gan, user_samples, num_synthetic=num_to_generate)
             
             # Add synthetic samples to dataset
-            for synth_sample in synthetic:
-                X_train_norm.append(synth_sample[0])
-                y_train.append(user_id)
-                user_sessions_train[user_id].append(len(X_train_norm)-1)
+            # Each element in synthetic is already (seq_len, 9)
+            for sample in synthetic:
+                X_train_norm.append(sample)
+                y_train = np.append(y_train, user_id)
+                user_sessions_train[user_id].append(len(X_train_norm) - 1)
+                augmented_count += 1
+
+    print(f"Added {augmented_count} synthetic samples to training set")
+    print(f"New training set size: {len(X_train_norm)}")
 
     print("\nStarting meta-learning training...")
     history = trainer.train(
         X_train_norm,
         user_sessions_train,
-        num_episodes=1000,
+        num_episodes=5000,
         eval_interval=100,
-        X_test_norm,
-        user_sessions_test
+        X_val=X_test_norm,
+        user_sessions_val=user_sessions_test
     )
+
+    # Save the trained encoder model
+    print("\nSaving trained model...")
+    os.makedirs('models', exist_ok=True)
+    encoder.save_weights('models/verification_encoder_weights.h5')
+    trainer.verification_head.save_weights('models/verification_head_weights.h5')
+    print("Model saved successfully!")
 
     print("\n>>> DEBUGGING ON VALIDATION SET <<<")
     trainer.debug_probs(X_test_norm, user_sessions_test, num_episodes=100, threshold=0.5)
@@ -159,33 +182,29 @@ def main():
     print(f"  FPR: {metrics['fpr']:.4f}")
     print(f"  FNR: {metrics['fnr']:.4f}")
 
-    # ---- STEP 6: PLOT CONFUSION MATRIX & TRAINING HISTORY ----
-    cm = trainer.compute_confusion(
-        X_test_norm,
-        user_sessions_test,
-        num_episodes=500,
-        threshold=0.5,
+    # ---- STEP 6: PLOT TRAINING HISTORY ----
+    print("\n---- Plotting Training History ----")
+    plot_training_history(history, save_path='models/training_history.png')
+
+    # ---- STEP 7: VISUALIZE EMBEDDING SPACE ----
+    print("\n---- Visualizing Embedding Space ----")
+
+    # Visualize training set embeddings
+    visualize_embeddings_tsne(
+        encoder, X_train_norm, user_sessions_train, 
+        num_users=10, samples_per_user=50,
+        title_prefix="Training",
+        save_path='models/embedding_train_tsne.png'
     )
 
-    print("Confusion matrix:\n", cm)
-    trainer.plot_confusion_matrix(cm, class_names=["Impostor", "Genuine"])
+    # Visualize test set embeddings (unseen users!)
+    visualize_embeddings_tsne(
+        encoder, X_test_norm, user_sessions_test, 
+        num_users=10, samples_per_user=50,
+        title_prefix="Test",
+        save_path='models/embedding_test_tsne.png'
+    )
 
-    #Plot training history
-    plt.figure(figsize=(12, 5))
-    plt.subplot(1, 2, 1)
-    plt.plot(history['train_losses'], label='Train Loss')
-    plt.xlabel('Episode')
-    plt.ylabel('Loss')
-    plt.title('Training Loss over Episodes')
-    plt.legend()
-    plt.subplot(1, 2, 2)
-    plt.plot(history['train_accs'], label='Train Accuracy')
-    plt.xlabel('Episode')
-    plt.ylabel('Accuracy')
-    plt.title('Training Accuracy over Episodes')
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
 
 if __name__ == "__main__":
     main()
