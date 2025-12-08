@@ -1,15 +1,40 @@
 import os
 import pickle
 import tensorflow as tf
+import numpy as np
 from tqdm import tqdm
 from src.meta_learning import MetaLearningTrainer
 from src.models import DigraphCNN
+from src.gan import VAEGAN
 from src.preprocessing import build_datasets
 from src.normalization import fit_normalizer, apply_normalizer
 
 # Make sure to change the below path to your local data path
 DATA_ROOT = "data/UB_keystroke_dataset"
 OUTPUT_PATH = "processed_keystrokes.pkl"
+
+
+def augment_user_data(vae_gan, user_samples, num_synthetic):
+    """Generate synthetic samples for a user using the trained VAE-GAN."""
+    # Stack user samples into a batch
+    user_batch = np.array(user_samples)
+    user_batch = tf.constant(user_batch, dtype=tf.float32)
+    
+    # Encode to get latent distribution
+    z_mean, z_log_var = vae_gan.encoder(user_batch, training=False)
+    
+    # Generate synthetic samples
+    synthetic_samples = []
+    for _ in range(num_synthetic):
+        # Sample from the learned distribution
+        epsilon = tf.random.normal(shape=tf.shape(z_mean))
+        z = z_mean + tf.exp(0.5 * z_log_var) * epsilon
+        
+        # Decode to generate synthetic sample
+        synthetic = vae_gan.decoder(z, training=False)
+        synthetic_samples.append(synthetic.numpy())
+    
+    return synthetic_samples
 
 
 def main():
@@ -63,10 +88,40 @@ def main():
     trainer = MetaLearningTrainer(
         encoder=encoder,
         n_way=5,
-        k_shot=1,
+        k_shot=2,
         q_query=1,
         lr=1e-3
     )
+
+    # ---- AUGMENT DATA WITH VAE-GAN ----
+    print("\n---- Augmenting data with VAE-GAN ----")
+
+    # Get max sequence length from training data
+    max_seq_len = max(x.shape[0] for x in X_train_norm)
+
+    # Create VAE-GAN model
+    vae_gan = VAEGAN(input_dim=9, latent_dim=64, seq_len=max_seq_len)
+
+    # Build the model by calling it with dummy data (REQUIRED before loading weights)
+    dummy_input = tf.zeros((1, max_seq_len, 9), dtype=tf.float32)
+    _ = vae_gan(dummy_input, training=False)  # This builds the model
+
+    # Now load the weights
+    vae_gan.encoder.load_weights('models/vae_encoder_weights.h5')
+    vae_gan.decoder.load_weights('models/vae_decoder_weights.h5')
+
+    # Find users with limited samples
+    MIN_SAMPLES = 10
+    for user_id, sessions in user_sessions_train.items():
+        if len(sessions) < MIN_SAMPLES:
+            user_samples = [X_train_norm[i] for i in sessions]
+            synthetic = augment_user_data(vae_gan, user_samples, num_synthetic=MIN_SAMPLES-len(sessions))
+            
+            # Add synthetic samples to dataset
+            for synth_sample in synthetic:
+                X_train_norm.append(synth_sample[0])
+                y_train.append(user_id)
+                user_sessions_train[user_id].append(len(X_train_norm)-1)
 
     print("\nStarting meta-learning training...")
     history = trainer.train(

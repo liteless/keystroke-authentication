@@ -53,15 +53,12 @@ def apply_normalizer(X: List[np.ndarray], stats: Dict[str, np.ndarray]) -> List[
     for digraphs in X:
         digraphs_copy = digraphs.copy()
 
-        #Apply ln(1 + x) to time features for normalization 
+        # Apply ln(1 + x) to time features for normalization 
         for idx in TIME_FEATURES:
-            digraphs_copy[:, idx] = np.log1p(np.abs(digraphs_copy[:, idx])) * np.sign(digraphs_copy[:, idx]) #ensure we preserve the sign after normalization
+            digraphs_copy[:, idx] = np.log1p(np.abs(digraphs_copy[:, idx])) * np.sign(digraphs_copy[:, idx])
 
-        #Normalize using mean and std
-        digraphs_copy = (digraphs_copy - mean) / std
-
-        #z-score normalization applied to all 9 features 
-        digraphs_new = (digraphs_copy - mean) / std
+        # Normalize using mean and std (ONLY ONCE!)
+        digraphs_new = (digraphs_copy - mean) / (std + 1e-8)  # Add epsilon to avoid division by zero
         X_norm.append(digraphs_new)
     
     return X_norm
