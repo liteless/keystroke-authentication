@@ -4,10 +4,12 @@ import tensorflow as tf
 import numpy as np
 from tqdm import tqdm
 from src.meta_learning import MetaLearningTrainer
+from src.meta_learning2 import VerificationMetaTrainer
 from src.models import DigraphCNN
 from src.gan import VAEGAN
 from src.preprocessing import build_datasets
 from src.normalization import fit_normalizer, apply_normalizer
+import matplotlib.pyplot as plt
 
 # Make sure to change the below path to your local data path
 DATA_ROOT = "data/UB_keystroke_dataset"
@@ -85,11 +87,11 @@ def main():
         dropout=0.3
     )
 
-    trainer = MetaLearningTrainer(
+    # ---- STEP 4: TRAIN THE META-LEARNING MODEL ----
+    trainer = VerificationMetaTrainer(
         encoder=encoder,
-        n_way=5,
         k_shot=2,
-        q_query=1,
+        q_query=15,
         lr=1e-3
     )
 
@@ -126,25 +128,64 @@ def main():
     print("\nStarting meta-learning training...")
     history = trainer.train(
         X_train_norm,
-        y_train,
         user_sessions_train,
         num_episodes=1000,
         eval_interval=100,
-        X_val=X_test_norm,
-        y_val=y_test,
-        user_sessions_val=user_sessions_test
-    )
-
-    # ---- STEP 4: FINAL EVALUATION ----
-    print("\nFinal evaluation on test set...")
-    test_acc = trainer.evaluate(
         X_test_norm,
-        y_test,
-        user_sessions_test,
-        num_episodes=1000
+        user_sessions_test
     )
-    print(f"Test Accuracy: {test_acc:.4f}")
 
+    print("\n>>> DEBUGGING ON VALIDATION SET <<<")
+    trainer.debug_probs(X_test_norm, user_sessions_test, num_episodes=100, threshold=0.5)
+
+    print("\n>>> DEBUGGING ON TRAINING SET <<<")
+    trainer.debug_probs(X_train_norm, user_sessions_train, num_episodes=100, threshold=0.5)
+
+    print("\n>>> DISTANCES ON VALIDATION SET <<<")
+    trainer.debug_distances(X_test_norm, user_sessions_test, num_episodes=100)
+
+    # ---- STEP 5: VERIFICATION ----
+    metrics = trainer.evaluate_metrics(
+        X_test_norm,
+        user_sessions_test,
+        num_episodes=500,
+        threshold=0.5,
+    )
+    
+    print("Verification metrics on test set:")
+    print(f"  Accuracy: {metrics['accuracy']:.4f}")
+    print(f"  TPR: {metrics['tpr']:.4f}")
+    print(f"  TNR: {metrics['tnr']:.4f}")
+    print(f"  FPR: {metrics['fpr']:.4f}")
+    print(f"  FNR: {metrics['fnr']:.4f}")
+
+    # ---- STEP 6: PLOT CONFUSION MATRIX & TRAINING HISTORY ----
+    cm = trainer.compute_confusion(
+        X_test_norm,
+        user_sessions_test,
+        num_episodes=500,
+        threshold=0.5,
+    )
+
+    print("Confusion matrix:\n", cm)
+    trainer.plot_confusion_matrix(cm, class_names=["Impostor", "Genuine"])
+
+    #Plot training history
+    plt.figure(figsize=(12, 5))
+    plt.subplot(1, 2, 1)
+    plt.plot(history['train_losses'], label='Train Loss')
+    plt.xlabel('Episode')
+    plt.ylabel('Loss')
+    plt.title('Training Loss over Episodes')
+    plt.legend()
+    plt.subplot(1, 2, 2)
+    plt.plot(history['train_accs'], label='Train Accuracy')
+    plt.xlabel('Episode')
+    plt.ylabel('Accuracy')
+    plt.title('Training Accuracy over Episodes')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
     main()

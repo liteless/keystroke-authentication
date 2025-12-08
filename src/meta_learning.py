@@ -177,3 +177,5 @@ class MetaLearningTrainer:
         confidence = 1.0 - (distances / threshold)
 
         return authenticated.numpy(), confidence.numpy()
+
+    

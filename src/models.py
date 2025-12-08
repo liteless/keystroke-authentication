@@ -61,7 +61,6 @@ class DigraphCNN(keras.Model):
         ], name='projection')
     
     def call(self, x, training=None):
-
         conv_outputs = []
         for conv_block in self.conv_blocks:
             conv_out = conv_block(x, training=training)
