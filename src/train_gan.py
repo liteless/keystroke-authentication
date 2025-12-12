@@ -38,11 +38,12 @@ def pad_sequences(sequences, max_len=None):
 
     padded = []
     for seq in sequences:
+        # Truncate or pad length
         if seq.shape[0] < max_len:
             padding = np.zeros((max_len - seq.shape[0], seq.shape[1]), dtype=np.float32)
             padded_seq = np.vstack([seq, padding])
         else:
-            padded_seq = seq[:max_len]  # Truncate if longer
+            padded_seq = seq[:max_len]
         padded.append(padded_seq)
 
     return np.array(padded), max_len
@@ -53,7 +54,7 @@ def main():
     print("Loading data...")
     DATA_ROOT = "data/UB_keystroke_dataset"
     data = build_datasets(DATA_ROOT, window_size=80)  # ADD window_size=80
-    X_train, y_train, X_test, y_test, user_sessions_train, user_sessions_test = data
+    X_train, _, X_test, _, user_sessions_train, _ = data
 
     # Normalize
     print("Normalizing data...")
@@ -88,7 +89,7 @@ def main():
 
     # Train
     print("\nTraining VAE-GAN...")
-    history = vae_gan.fit(
+    vae_gan.fit(
         train_dataset,
         validation_data=val_dataset,
         epochs=100,

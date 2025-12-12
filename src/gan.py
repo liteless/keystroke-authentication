@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 import numpy as np
-from typing import Tuple, List
+from typing import List
 
 
 class VAEEncoder(keras.Model):
@@ -12,7 +12,6 @@ class VAEEncoder(keras.Model):
 
     def __init__(
         self,
-        input_dim: int = 9,
         latent_dim: int = 64,
         hidden_dims: List[int] = [64, 128, 256],
         dropout: float = 0.3,
@@ -209,7 +208,7 @@ class VAEGAN(keras.Model):
         self.latent_dim = latent_dim
         self.seq_len = seq_len
 
-        self.encoder = VAEEncoder(input_dim=input_dim, latent_dim=latent_dim)
+        self.encoder = VAEEncoder(latent_dim=latent_dim)
         self.decoder = VAEDecoder(
             latent_dim=latent_dim, output_seq_len=seq_len, output_dim=input_dim)
         self.discriminator = Discriminator(input_dim=input_dim)
@@ -278,8 +277,6 @@ class VAEGAN(keras.Model):
             real_data = data[0]
         else:
             real_data = data
-
-        batch_size = tf.shape(real_data)[0]
 
         # ========== Train Discriminator ==========
         with tf.GradientTape() as disc_tape:

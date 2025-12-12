@@ -1,8 +1,7 @@
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
-import numpy as np
-from typing import List, Tuple
+from typing import List
 
 class DigraphCNN(keras.Model):
     """
@@ -77,72 +76,6 @@ class DigraphCNN(keras.Model):
         return embedding
     
 
-class PrototypicalNetwork(keras.Model):
-    """
-    Prototypical Network wrapper for few-shot learning.
-    Computes prototypes for each class and
-    classifies based on distances to prototypes in embedding space.
-    """
-
-    def __init__(self, encoder: keras.Model, **kwargs):
-        super(PrototypicalNetwork, self).__init__(**kwargs)
-        self.encoder = encoder
-
-    def call(self, inputs, training=None):
-        """
-        Input: Tuple of (support, support_labels, query)
-            support: Support set (n_support, seq_len, input_dim)
-            support_labels: Labels for support set (n_support,)
-            query: Query set (n_query, seq_len, input_dim)
-
-        Output: Tuple of (logits, prototypes)
-            logits: Logits for query samples (n_query, n_classes)
-            prototypes: Class prototypes (n_classes, embedding_dim)
-        """
-        support, support_labels, query = inputs
-
-        # Encode support and query samples
-        support_embeddings = self.encoder(support, training=training)  # (n_support, embedding_dim)
-        query_embeddings = self.encoder(query, training=training)  # (n_query, embedding_dim)
-
-        # Compute prototypes (class centroids)
-        unique_labels, _ = tf.unique(support_labels)
-
-        # Compute prototypes for each class
-        prototypes = []
-        for i in range(tf.shape(unique_labels)[0]):
-            label = unique_labels[i]
-            mask = tf.equal(support_labels, label)
-            class_embeddings = tf.boolean_mask(support_embeddings, mask)
-            prototype = tf.reduce_mean(class_embeddings, axis=0)
-            prototypes.append(prototype)
-
-        prototypes = tf.stack(prototypes)  # (n_classes, embedding_dim)
-
-        # Compute distances from queries to prototypes
-        distances = euclidean_distances(query_embeddings, prototypes)
-        logits = -tf.square(distances)
-
-        return logits, prototypes
-
-    def predict_with_prototypes(self, query, prototypes, training=None):
-        """
-        Predict class for query samples given prototypes
-
-        Args:
-            query: Query samples (n_query, seq_len, input_dim)
-            prototypes: Class prototypes (n_classes, embedding_dim)
-            training: Whether in training mode
-
-        Returns:
-            Predicted class indices (n_query,)
-        """
-        query_embeddings = self.encoder(query, training=training)
-        distances = euclidean_distances(query_embeddings, prototypes)
-        predictions = tf.argmin(distances, axis=1)
-        return predictions
-
-
 def euclidean_distances(x, y):
     """Compute pairwise Euclidean distance between two sets of vectors"""
     x_expanded = tf.expand_dims(x, 1)  
@@ -177,24 +110,3 @@ if __name__ == "__main__":
     norms = tf.norm(embeddings, axis=1)
     print(f"Embeddings are normalized: {tf.reduce_all(tf.abs(norms - 1.0) < 0.01)}")
 
-    #---------------Test Prototypical Network---------------
-    print("\nTesting PrototypicalNetwork...")
-    proto_net = PrototypicalNetwork(model)
-
-    N_WAY = 3
-    K_SHOT = 5
-    Q_QUERY = 10
-
-    support = tf.random.normal((N_WAY * K_SHOT, SEQ_LEN, INPUT_DIM))
-    support_labels = tf.repeat(tf.range(N_WAY), K_SHOT)
-    query = tf.random.normal((Q_QUERY, SEQ_LEN, INPUT_DIM))
-
-    logits, prototypes = proto_net(
-        (support, support_labels, query), training=False)
-    print(f"Support shape: {support.shape}")
-    print(f"Query shape: {query.shape}")
-    print(f"Logits shape: {logits.shape}")
-    print(f"Prototypes shape: {prototypes.shape}")
-
-    predictions = tf.argmax(logits, axis=1)
-    print(f"Predictions: {predictions.numpy()}")

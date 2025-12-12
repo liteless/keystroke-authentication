@@ -3,20 +3,7 @@ from typing import List, Tuple, Dict
 from pathlib import Path
 from collections import defaultdict
 
-# # OPTION 1: coordinates = indexes
-# KEYS = [["", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "D9", "D0", "", "", "", "Back"],
-#         ["", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
-#         ["", "A", "S", "D", "F", "G", "H", "J", "K", "L"],
-#         ["LShiftKey", "Z", "X", "C", "V", "B", "N", "M", "Oemcomma", "OemPeriod", "", "RShiftKey"],
-#         ["", "", "", "", "", "Space", "Space", "Space", "Space", "Space"]]
-
-# KEYBOARD_LAYOUT = {}
-# for r, row in enumerate(KEYS):
-#     for c, key in enumerate(row):
-#         KEYBOARD_LAYOUT[key] = (c, r)
-
 #---- STEP 1: DEFINE KEYBOARD LAYOUT ----
-# OPTION 2: Manually defined coordinates
 KEYBOARD_LAYOUT = {
     #D1 is chosen to be (0, 0) for simplicity
     #Row -1: Escape & Function Keys 
@@ -63,7 +50,6 @@ KEYBOARD_LAYOUT = {
 
     #Arrow Keys
     'Up': (16, 3), 'Down': (16, 4), 'Left': (15, 4), 'Right': (17, 4)
-
 }
 
 #Some additional keys with multiple names
@@ -81,6 +67,7 @@ KEYBOARD_LAYOUT.update({
 
 
 #---- STEP 2: CREATE A CLASS TO HOLD KEYSTROKE SESSIONS ---- 
+
 #Helper functions for keystroke analysis 
 def get_spatial_distances(key1: str, key2: str):
     """Calculate the signed horizontal and vertical distances from key1 to key2"""
@@ -129,21 +116,18 @@ def extract_digraphs(session: KeystrokeSession) -> np.ndarray:
     Returns:
         numpy array of shape (n_digraphs, 5)
     """
+
     #Ensure events are sorted by timestamp
     session.sort_events()
     sorted_events = session.events
     
     keypresses = [] #list of keydown order
-    active_presses = {}  # dicto of key -> press_time
+    active_presses = {}  # dict of key -> press_time
     
     for event in sorted_events:
         key, ts, etype = event['key'], event['timestamp'], event['event']
-        
-        #If the event is a key press, store the timestamp
-        #If it's a release, find the matching press and record the pair
-        #We want to store in order of key presses rather than releases
+
         if etype == 'press':
-            # create record at keydown, append in order
             idx = len(keypresses)
             keypresses.append({
                 'key': key,
@@ -159,11 +143,12 @@ def extract_digraphs(session: KeystrokeSession) -> np.ndarray:
             keypresses[idx]['release'] = ts
             keypresses[idx]['hold_time'] = ts - press_ts
     
-    #Keep only the pairs that have a release time recorded
+    # Remove any keypresses that do not have a corresponding release 
     key_pairs = [kp for kp in keypresses if kp['release'] is not None]
 
-    digraphs = []
+
     #Iterate through consecutive key pairs to form digraphs
+    digraphs = []
     for i in range(len(key_pairs) - 1):
         k1, k2 = key_pairs[i], key_pairs[i+1]
         if k1['key'] not in KEYBOARD_LAYOUT or k2['key'] not in KEYBOARD_LAYOUT:
@@ -226,19 +211,6 @@ def split_window_digraphs(digraphs: np.ndarray, window_size: int = 50, step: int
         start += step
 
     return windows
-
-# def normalize_digraphs(digraphs: np.ndarray) -> np.ndarray:
-#     """ Normalize digraph features """
-#     if len(digraphs) == 0:
-#         return digraphs
-    
-#     normalized = digraphs.copy()
-
-#     # Use log transform for time features to handle wide range of values
-#     for i in range(5):
-#         normalized[:, i] = np.log1p(normalized[:, i])
-        
-#     return normalized
 
 #---- STEP 3: PARSE RAW DATA FILES INTO KEYSTROKE SESSIONS ----
 def parse_event_type(raw: str) -> str | None: 

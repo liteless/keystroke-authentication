@@ -26,7 +26,7 @@ def fit_normalizer(X_train: List[np.ndarray]) -> Dict[str, np.ndarray]:
         stats: Dictionary with keys 'mean' and 'std', each mapping to a numpy array of shape (9,)
       across the training data.
     """
-    all_train = np.vstack(X_train)  # (total_digraphs, 9)
+    all_train = np.vstack(X_train)  # shape: (total_digraphs, 9)
     all_train_copy = all_train.copy()
 
     #Apply ln(1 + x) to only time features for normalization 

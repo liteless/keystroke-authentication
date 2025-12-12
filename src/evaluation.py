@@ -53,7 +53,7 @@ def evaluate_reconstruction_quality(vae_gan, X_test, num_samples=100, max_seq_le
     test_batch = tf.constant(test_samples, dtype=tf.float32)
     
     # Reconstruct
-    reconstructed, z_mean, z_log_var = vae_gan(test_batch, training=False)
+    reconstructed, _, _ = vae_gan(test_batch, training=False)
     reconstructed = reconstructed.numpy()
     
     # Compute metrics
@@ -258,7 +258,7 @@ def visualize_vae_reconstructions(vae_gan, X_data, num_samples=5, max_seq_len=80
     reconstructed, _, _ = vae_gan(batch, training=False)
     reconstructed = reconstructed.numpy()
     
-    fig, axes = plt.subplots(num_samples, 2, figsize=(12, 3*num_samples))
+    _, axes = plt.subplots(num_samples, 2, figsize=(12, 3*num_samples))
     if num_samples == 1:
         axes = axes.reshape(1, -1)
     
@@ -341,7 +341,7 @@ def main():
     # Load data
     print("\n[1/6] Loading and preprocessing data...")
     data = build_datasets(DATA_ROOT, window_size=WINDOW_SIZE)
-    X_train, y_train, X_test, y_test, user_sessions_train, user_sessions_test = data
+    X_train, _, X_test, _, user_sessions_train, _ = data
     
     # Normalize
     print("[2/6] Normalizing data...")
